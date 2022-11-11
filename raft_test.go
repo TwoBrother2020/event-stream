@@ -19,8 +19,8 @@ func newCacheFSM() *cacheFSM {
 }
 
 func (c cacheFSM) Apply(log *raft.Log) interface{} {
-	//TODO implement me
-	panic("implement me")
+	s := ""
+	return s
 }
 
 func (c cacheFSM) Snapshot() (raft.FSMSnapshot, error) {
@@ -33,7 +33,7 @@ func (c cacheFSM) Restore(snapshot io.ReadCloser) error {
 	panic("implement me")
 }
 
-func Node(dir, name, host string, bootstrap bool) (*raft.Raft, error) {
+func Node(dir, name, host string, bootstrap bool) (*raft.Raft, *raftboltdb.BoltStore, error) {
 	raftConfig := raft.DefaultConfig()
 	raftConfig.LocalID = raft.ServerID(name)
 	nodeDir := filepath.Join(dir, name)
@@ -72,7 +72,7 @@ func Node(dir, name, host string, bootstrap bool) (*raft.Raft, error) {
 		newRaft.BootstrapCluster(configuration)
 	}
 
-	return newRaft, nil
+	return newRaft, logStore, nil
 
 }
 func check(e error) {
@@ -80,14 +80,16 @@ func check(e error) {
 		panic(e)
 	}
 }
-func TestAddNode(t *testing.T) {
+
+func BenchmarkNodeWrite(b *testing.B) {
+
 	dir := "data"
-	nodeA, err := Node(dir, "A", "localhost:5000", true)
+	nodeA, logA, err := Node(dir, "A", "localhost:5000", false)
 	check(err)
-	defer nodeA.Shutdown().Error()
-	nodeB, err := Node(dir, "B", "localhost:50002", false)
+	defer nodeA.Shutdown()
+	nodeB, _, err := Node(dir, "B", "localhost:50002", false)
 	check(err)
-	defer nodeB.Shutdown().Error()
+	defer nodeB.Shutdown()
 
 	configurationFuture := nodeA.GetConfiguration()
 	err = configurationFuture.Error()
@@ -95,13 +97,19 @@ func TestAddNode(t *testing.T) {
 
 	configuration := configurationFuture.Configuration()
 	println(configuration.Servers)
+	leader := <-nodeA.LeaderCh()
+	if leader {
+		index, err := logA.LastIndex()
+		check(err)
+		println("last", index)
+		for i := 0; i < b.N; i++ {
+			future := nodeA.Apply([]byte("hello world2"), 1*time.Minute)
 
-	id, serverID := nodeA.LeaderWithID()
-	println("leader", id, "address", serverID)
-
-	time.Sleep(1 * time.Minute)
-	//future := node.Apply([]byte("hello world"), 1*time.Minute)
-	//err = future.Error()
-	//check(err)
+			if err := future.Error(); err != nil {
+				println("error")
+				return
+			}
+		}
+	}
 
 }
