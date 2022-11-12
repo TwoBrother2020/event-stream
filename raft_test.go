@@ -1,12 +1,16 @@
 package main
 
 import (
+	"github.com/cockroachdb/pebble"
 	"github.com/hashicorp/raft"
 	raftboltdb "github.com/hashicorp/raft-boltdb/v2"
+	"github.com/tecbot/gorocksdb"
 	"io"
+	"log"
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"testing"
 	"time"
 )
@@ -81,7 +85,7 @@ func check(e error) {
 	}
 }
 
-func BenchmarkNodeWrite(b *testing.B) {
+func TestNodeWrite(t *testing.T) {
 
 	dir := "data"
 	nodeA, logA, err := Node(dir, "A", "localhost:5000", false)
@@ -102,14 +106,49 @@ func BenchmarkNodeWrite(b *testing.B) {
 		index, err := logA.LastIndex()
 		check(err)
 		println("last", index)
-		for i := 0; i < b.N; i++ {
-			future := nodeA.Apply([]byte("hello world2"), 1*time.Minute)
+		future := nodeA.Apply([]byte("hello world2"), 1*time.Minute)
 
-			if err := future.Error(); err != nil {
-				println("error")
-				return
-			}
+		if err := future.Error(); err != nil {
+			println("error")
+			return
 		}
 	}
 
+}
+
+func BenchmarkPebbleWrite(b *testing.B) {
+	dir := b.TempDir()
+	db, err := pebble.Open(dir, &pebble.Options{})
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer db.Close()
+
+	for i := 0; i < b.N; i++ {
+		keyStr := "test" + strconv.Itoa(i)
+		var key = []byte(keyStr)
+		if err := db.Set(key, key, pebble.NoSync); err != nil {
+			log.Fatal(err)
+		}
+	}
+}
+
+func BenchmarkRocksDbWrite(b *testing.B) {
+
+	dir := b.TempDir()
+	options := gorocksdb.NewDefaultOptions()
+	db, err := gorocksdb.OpenDb(options, dir)
+	if err != nil {
+		return
+	}
+	defer db.Close()
+	writeOptions := gorocksdb.NewDefaultWriteOptions()
+	for i := 0; i < b.N; i++ {
+		keyStr := "test" + strconv.Itoa(i)
+		var key = []byte(keyStr)
+		err := db.Put(writeOptions, key, key)
+		if err != nil {
+			b.Fatal(err)
+		}
+	}
 }
