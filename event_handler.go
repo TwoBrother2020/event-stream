@@ -1,4 +1,4 @@
-package src
+package event_stream
 
 import (
 	"fmt"
@@ -32,6 +32,7 @@ func NewEventHandler(dir string, options *gorocksdb.Options, txOptions *gorocksd
 
 func (p *EventHandler) Apply(log *raft.Log) interface{} {
 
+	println("apply", log.Index)
 	begin := p.db.TransactionBegin(gorocksdb.NewDefaultWriteOptions(), gorocksdb.NewDefaultTransactionOptions(), nil)
 
 	begin.Put([]byte("consumer_index"), uint64ToBytes(log.Index))
@@ -44,6 +45,7 @@ func (p *EventHandler) Apply(log *raft.Log) interface{} {
 }
 
 func (p *EventHandler) Snapshot() (raft.FSMSnapshot, error) {
+	println("create Snapshot")
 	checkpoint, err := p.db.NewCheckpoint()
 	if err != nil {
 		return nil, err
@@ -54,6 +56,8 @@ func (p *EventHandler) Snapshot() (raft.FSMSnapshot, error) {
 }
 
 func (p *EventHandler) Restore(snapshot io.ReadCloser) error {
+	println("Restore Snapshot")
+
 	p.db.Close()
 	err := os.RemoveAll(p.dir)
 	if err != nil {

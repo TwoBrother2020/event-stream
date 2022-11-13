@@ -1,15 +1,17 @@
-package src
+package event_stream
 
 import (
 	"github.com/cockroachdb/pebble"
 	"github.com/hashicorp/raft"
 	"github.com/stretchr/testify/assert"
 	"github.com/tecbot/gorocksdb"
+	"io/fs"
 	"log"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 )
@@ -17,16 +19,15 @@ import (
 func Node(dir, name, host string, bootstrap bool) (*raft.Raft, *RocksdbStore, error) {
 	raftConfig := raft.DefaultConfig()
 	raftConfig.LocalID = raft.ServerID(name)
-	nodeDir := filepath.Join(dir, name)
-	_, err := os.Stat(nodeDir)
+	_, err := os.Stat(dir)
 	if os.IsNotExist(err) {
-		err = os.Mkdir(nodeDir, 0755)
+		err = os.Mkdir(dir, fs.ModePerm)
 	}
 	check(err)
 
-	store, _ := NewRocksdbStore(nodeDir)
+	store, _ := NewRocksdbStore(dir)
 
-	snapshotStore, err := raft.NewFileSnapshotStore(nodeDir, 1, os.Stderr)
+	snapshotStore, err := raft.NewFileSnapshotStore(dir, 1, os.Stderr)
 	check(err)
 
 	address, err := net.ResolveTCPAddr("tcp", host)
@@ -34,7 +35,10 @@ func Node(dir, name, host string, bootstrap bool) (*raft.Raft, *RocksdbStore, er
 
 	transport, err := raft.NewTCPTransport(address.String(), address, 3, 10*time.Second, os.Stderr)
 	check(err)
-	handler, err := NewEventHandler(dir, gorocksdb.NewDefaultOptions(), gorocksdb.NewDefaultTransactionDBOptions())
+	options := gorocksdb.NewDefaultOptions()
+	options.SetCreateIfMissing(true)
+
+	handler, err := NewEventHandler(filepath.Join(dir, "state"), options, gorocksdb.NewDefaultTransactionDBOptions())
 	check(err)
 	newRaft, err := raft.NewRaft(raftConfig, handler, store, store, snapshotStore, transport)
 	check(err)
@@ -63,13 +67,22 @@ func check(e error) {
 
 func TestNodeWrite(t *testing.T) {
 
-	dir := "data"
-	nodeA, logA, err := Node(dir, "A", "localhost:5000", true)
+	tempDir := t.TempDir()
+	nodeA, _, err := Node(filepath.Join(tempDir, "A"), "A", "localhost:5000", true)
 	check(err)
 	defer nodeA.Shutdown()
-	nodeB, _, err := Node(dir, "B", "localhost:50002", false)
+	leader := <-nodeA.LeaderCh()
+	println("is leader ", leader)
+	apply := nodeA.Apply([]byte("hello"), 1*time.Minute)
+	assert.Nil(t, apply.Error())
+	println("send hello")
+
+	nodeB, _, err := Node(filepath.Join(tempDir, "B"), "B", "localhost:50002", false)
 	check(err)
 	defer nodeB.Shutdown()
+
+	addVoter := nodeA.AddVoter("B", "localhost:50002", 1, 10*time.Second)
+	assert.Nil(t, addVoter.Error())
 
 	configurationFuture := nodeA.GetConfiguration()
 	err = configurationFuture.Error()
@@ -77,25 +90,37 @@ func TestNodeWrite(t *testing.T) {
 
 	configuration := configurationFuture.Configuration()
 	println(configuration.Servers)
-	leader := <-nodeA.LeaderCh()
 	if leader {
 		var data string
+		var group sync.WaitGroup
 		for i := 0; i < 100; i++ {
-			index, err := logA.LastIndex()
-			check(err)
-			println("last index", index)
 			if len(data) == 0 {
 				data = "hello world"
 			}
-			future := nodeA.Apply([]byte(data), 1*time.Minute)
-			if err := future.Error(); err != nil {
-				return
-			}
-			data = future.Response().(string)
 
-			println("return ", data)
+			go func() {
+				group.Add(1)
+				defer group.Done()
+				future := nodeA.Apply([]byte(data), 1*time.Minute)
+				if err2 := future.Error(); err2 != nil {
+
+					return
+				}
+				data = future.Response().(string)
+				println(i, "event 1 return ", data)
+
+				future = nodeA.Apply([]byte(data), 1*time.Minute)
+				if err2 := future.Error(); err2 != nil {
+
+					return
+				}
+				data = future.Response().(string)
+				println(i, "event 2 return ", data)
+
+			}()
+
 		}
-
+		group.Wait()
 	}
 
 }

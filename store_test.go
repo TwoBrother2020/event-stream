@@ -1,4 +1,4 @@
-package src
+package event_stream
 
 import (
 	"github.com/hashicorp/raft"
