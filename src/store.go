@@ -6,7 +6,7 @@ import (
 )
 
 type RocksdbStore struct {
-	db           *gorocksdb.DB
+	Db           *gorocksdb.DB
 	writeOptions *gorocksdb.WriteOptions
 	readOptions  *gorocksdb.ReadOptions
 	stableStore  *gorocksdb.ColumnFamilyHandle
@@ -24,15 +24,15 @@ func NewRocksdbStore(dir string) (*RocksdbStore, error) {
 		return nil, err
 	}
 
-	return &RocksdbStore{db: db, writeOptions: gorocksdb.NewDefaultWriteOptions(), readOptions: gorocksdb.NewDefaultReadOptions(), stableStore: familyHandles[1]}, nil
+	return &RocksdbStore{Db: db, writeOptions: gorocksdb.NewDefaultWriteOptions(), readOptions: gorocksdb.NewDefaultReadOptions(), stableStore: familyHandles[1]}, nil
 }
 
 func (p *RocksdbStore) Set(key []byte, val []byte) error {
-	return p.db.PutCF(p.writeOptions, p.stableStore, key, val)
+	return p.Db.PutCF(p.writeOptions, p.stableStore, key, val)
 }
 
 func (p *RocksdbStore) Get(key []byte) ([]byte, error) {
-	slice, err := p.db.GetCF(p.readOptions, p.stableStore, key)
+	slice, err := p.Db.GetCF(p.readOptions, p.stableStore, key)
 	if err != nil {
 		return nil, err
 	}
@@ -55,7 +55,7 @@ func (p *RocksdbStore) GetUint64(key []byte) (uint64, error) {
 }
 
 func (p *RocksdbStore) FirstIndex() (uint64, error) {
-	iterator := p.db.NewIterator(p.readOptions)
+	iterator := p.Db.NewIterator(p.readOptions)
 	iterator.SeekToFirst()
 	key := iterator.Key()
 	if len(key.Data()) == 0 {
@@ -66,7 +66,7 @@ func (p *RocksdbStore) FirstIndex() (uint64, error) {
 
 func (p *RocksdbStore) LastIndex() (uint64, error) {
 
-	iterator := p.db.NewIterator(p.readOptions)
+	iterator := p.Db.NewIterator(p.readOptions)
 	iterator.SeekToLast()
 	key := iterator.Key()
 	if len(key.Data()) == 0 {
@@ -76,7 +76,7 @@ func (p *RocksdbStore) LastIndex() (uint64, error) {
 }
 
 func (p *RocksdbStore) GetLog(index uint64, log *raft.Log) error {
-	val, err := p.db.Get(p.readOptions, uint64ToBytes(index))
+	val, err := p.Db.Get(p.readOptions, uint64ToBytes(index))
 	if err != nil {
 		return err
 	}
@@ -100,11 +100,11 @@ func (p *RocksdbStore) StoreLogs(logs []*raft.Log) error {
 		}
 		batch.Put(uint64ToBytes(log.Index), buffer.Bytes())
 	}
-	err := p.db.Write(p.writeOptions, batch)
+	err := p.Db.Write(p.writeOptions, batch)
 	return err
 }
 
 func (p *RocksdbStore) DeleteRange(min, max uint64) error {
-	err := p.db.DeleteFileInRange(gorocksdb.Range{Start: uint64ToBytes(min), Limit: uint64ToBytes(max)})
+	err := p.Db.DeleteFileInRange(gorocksdb.Range{Start: uint64ToBytes(min), Limit: uint64ToBytes(max)})
 	return err
 }
