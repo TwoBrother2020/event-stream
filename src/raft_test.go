@@ -1,11 +1,9 @@
-package main
+package src
 
 import (
 	"github.com/cockroachdb/pebble"
 	"github.com/hashicorp/raft"
-	raftboltdb "github.com/hashicorp/raft-boltdb/v2"
 	"github.com/tecbot/gorocksdb"
-	"io"
 	"log"
 	"net"
 	"os"
@@ -15,29 +13,7 @@ import (
 	"time"
 )
 
-type cacheFSM struct {
-}
-
-func newCacheFSM() *cacheFSM {
-	return &cacheFSM{}
-}
-
-func (c cacheFSM) Apply(log *raft.Log) interface{} {
-	s := ""
-	return s
-}
-
-func (c cacheFSM) Snapshot() (raft.FSMSnapshot, error) {
-	//TODO implement me
-	panic("implement me")
-}
-
-func (c cacheFSM) Restore(snapshot io.ReadCloser) error {
-	//TODO implement me
-	panic("implement me")
-}
-
-func Node(dir, name, host string, bootstrap bool) (*raft.Raft, *raftboltdb.BoltStore, error) {
+func Node(dir, name, host string, bootstrap bool) (*raft.Raft, *RocksdbStore, error) {
 	raftConfig := raft.DefaultConfig()
 	raftConfig.LocalID = raft.ServerID(name)
 	nodeDir := filepath.Join(dir, name)
@@ -46,11 +22,8 @@ func Node(dir, name, host string, bootstrap bool) (*raft.Raft, *raftboltdb.BoltS
 		err = os.Mkdir(nodeDir, 0755)
 	}
 	check(err)
-	logStore, err := raftboltdb.NewBoltStore(filepath.Join(nodeDir, "raft-log.bolt"))
-	check(err)
 
-	stableStore, err := raftboltdb.NewBoltStore(filepath.Join(nodeDir, "raft-stable.bolt"))
-	check(err)
+	store, _ := NewRocksdbStore(nodeDir)
 
 	snapshotStore, err := raft.NewFileSnapshotStore(nodeDir, 1, os.Stderr)
 	check(err)
@@ -61,7 +34,7 @@ func Node(dir, name, host string, bootstrap bool) (*raft.Raft, *raftboltdb.BoltS
 	transport, err := raft.NewTCPTransport(address.String(), address, 3, 10*time.Second, os.Stderr)
 	check(err)
 
-	newRaft, err := raft.NewRaft(raftConfig, newCacheFSM(), logStore, stableStore, snapshotStore, transport)
+	newRaft, err := raft.NewRaft(raftConfig, NewEventHandler(), store, store, snapshotStore, transport)
 	check(err)
 
 	if bootstrap {
@@ -76,9 +49,10 @@ func Node(dir, name, host string, bootstrap bool) (*raft.Raft, *raftboltdb.BoltS
 		newRaft.BootstrapCluster(configuration)
 	}
 
-	return newRaft, logStore, nil
+	return newRaft, store, nil
 
 }
+
 func check(e error) {
 	if e != nil {
 		panic(e)
@@ -88,7 +62,7 @@ func check(e error) {
 func TestNodeWrite(t *testing.T) {
 
 	dir := "data"
-	nodeA, logA, err := Node(dir, "A", "localhost:5000", false)
+	nodeA, logA, err := Node(dir, "A", "localhost:5000", true)
 	check(err)
 	defer nodeA.Shutdown()
 	nodeB, _, err := Node(dir, "B", "localhost:50002", false)
@@ -103,15 +77,23 @@ func TestNodeWrite(t *testing.T) {
 	println(configuration.Servers)
 	leader := <-nodeA.LeaderCh()
 	if leader {
-		index, err := logA.LastIndex()
-		check(err)
-		println("last", index)
-		future := nodeA.Apply([]byte("hello world2"), 1*time.Minute)
+		var data string
+		for i := 0; i < 100; i++ {
+			index, err := logA.LastIndex()
+			check(err)
+			println("last index", index)
+			if len(data) == 0 {
+				data = "hello world"
+			}
+			future := nodeA.Apply([]byte(data), 1*time.Minute)
+			if err := future.Error(); err != nil {
+				return
+			}
+			data = future.Response().(string)
 
-		if err := future.Error(); err != nil {
-			println("error")
-			return
+			println("return ", data)
 		}
+
 	}
 
 }

@@ -1,18 +1,14 @@
-package main
+package src
 
 import (
 	"github.com/hashicorp/raft"
 	"github.com/stretchr/testify/assert"
-	"github.com/tecbot/gorocksdb"
 	"testing"
 )
 
-func TestPartition(t *testing.T) {
+func TestStore(t *testing.T) {
 	dir := t.TempDir()
-	db, err := createDb(dir)
-	assert.Nil(t, err)
-
-	partition := NewPartition(db, gorocksdb.NewDefaultWriteOptions(), gorocksdb.NewDefaultReadOptions())
+	partition, _ := NewRocksdbStore(dir)
 	index, err := partition.FirstIndex()
 	assert.Equal(t, uint64(0), index, "The two words should be the same.")
 	latIndex, err := partition.LastIndex()
@@ -31,10 +27,4 @@ func TestPartition(t *testing.T) {
 	assert.Equal(t, log.Index, data.Index)
 	assert.Equal(t, log.Data, data.Data)
 
-}
-
-func createDb(dir string) (*gorocksdb.DB, error) {
-	options := gorocksdb.NewDefaultOptions()
-	options.SetCreateIfMissing(true)
-	return gorocksdb.OpenDb(options, dir)
 }
