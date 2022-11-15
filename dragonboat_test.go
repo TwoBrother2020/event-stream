@@ -4,38 +4,56 @@ import (
 	"fmt"
 	"github.com/lni/dragonboat/v4"
 	"github.com/lni/dragonboat/v4/config"
-	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestDragonboat(t *testing.T) {
 
-	datadir := filepath.Join(t.TempDir(), fmt.Sprintf("node%d", 1))
-	nhc := config.NodeHostConfig{
-		WALDir:         datadir,
-		NodeHostDir:    datadir,
-		RTTMillisecond: 200,
-		RaftAddress:    "localhost:63001",
-	}
-	nh, err := dragonboat.NewNodeHost(nhc)
+	dir := t.TempDir()
+	node1, err := creatNode(dir, "localhost:63001", 1)
 	if err != nil {
 		t.Error(err)
 	}
-	defer nh.Close()
+	defer node1.Close()
 
 	rc := config.Config{
-		ReplicaID:          uint64(1),
-		ShardID:            exampleShardID,
+		ReplicaID:          1,
+		ShardID:            1,
 		ElectionRTT:        10,
 		HeartbeatRTT:       1,
 		CheckQuorum:        true,
 		SnapshotEntries:    10,
 		CompactionOverhead: 5,
 	}
-	if err := nh.StartOnDiskReplica(map[uint64]dragonboat.Target{1: "localhost:63001"}, false, NewDiskKV, rc); err != nil {
-		fmt.Fprintf(os.Stderr, "failed to add cluster, %v\n", err)
+	err = node1.StartOnDiskReplica(map[uint64]dragonboat.Target{1: "localhost:63001"}, false, NewDiskKV, rc)
+	if err != nil {
 		t.Error(err)
 	}
 
+	node2, err := creatNode(dir, "localhost:63002", 2)
+	if err != nil {
+		t.Error(err)
+	}
+	defer node2.Close()
+	rc.ReplicaID = 2
+
+	time.Sleep(1 * time.Minute)
+}
+
+func creatNode(dir, host string, node uint64) (*dragonboat.NodeHost, error) {
+	datadir := filepath.Join(dir, fmt.Sprintf("node%d", node))
+	nhc := config.NodeHostConfig{
+		WALDir:         datadir,
+		NodeHostDir:    datadir,
+		RTTMillisecond: 200,
+		RaftAddress:    host,
+	}
+	nh, err := dragonboat.NewNodeHost(nhc)
+	if err != nil {
+		return nil, err
+	}
+
+	return nh, nil
 }
