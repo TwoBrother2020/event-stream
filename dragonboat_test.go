@@ -57,3 +57,7 @@ func creatNode(dir, host string, node uint64) (*dragonboat.NodeHost, error) {
 
 	return nh, nil
 }
+
+func TestCar(t *testing.T) {
+
+}
