@@ -1,6 +1,6 @@
 // Generated SBE (Simple Binary Encoding) message codec
 
-package uk_co_real_logic_sbe_benchmarks
+package protocol
 
 import (
 	"fmt"

@@ -1,5 +1,5 @@
 # Example 4 - On Disk State Machine #
-
+java -Dsbe.target.language=Golang -Dsbe.xinclude.aware=true -Dsbe.output.dir=../ -jar sbe-all-1.27.1-SNAPSHOT.jar protocol.xml
 ## About ##
 This example uses a [Pebble](https://github.com/cockroachdb/pebble) based distributed key-value store to demonstrate the on disk state machine support in Dragonboat.
 

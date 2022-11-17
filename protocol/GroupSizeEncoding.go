@@ -1,6 +1,6 @@
 // Generated SBE (Simple Binary Encoding) message codec
 
-package uk_co_real_logic_sbe_benchmarks
+package protocol
 
 import (
 	"fmt"
@@ -10,14 +10,14 @@ import (
 
 type GroupSizeEncoding struct {
 	BlockLength uint16
-	NumInGroup  uint16
+	NumInGroup  uint8
 }
 
 func (g *GroupSizeEncoding) Encode(_m *SbeGoMarshaller, _w io.Writer) error {
 	if err := _m.WriteUint16(_w, g.BlockLength); err != nil {
 		return err
 	}
-	if err := _m.WriteUint16(_w, g.NumInGroup); err != nil {
+	if err := _m.WriteUint8(_w, g.NumInGroup); err != nil {
 		return err
 	}
 	return nil
@@ -34,7 +34,7 @@ func (g *GroupSizeEncoding) Decode(_m *SbeGoMarshaller, _r io.Reader, actingVers
 	if !g.NumInGroupInActingVersion(actingVersion) {
 		g.NumInGroup = g.NumInGroupNullValue()
 	} else {
-		if err := _m.ReadUint16(_r, &g.NumInGroup); err != nil {
+		if err := _m.ReadUint8(_r, &g.NumInGroup); err != nil {
 			return err
 		}
 	}
@@ -60,7 +60,7 @@ func GroupSizeEncodingInit(g *GroupSizeEncoding) {
 }
 
 func (*GroupSizeEncoding) EncodedLength() int64 {
-	return 4
+	return 3
 }
 
 func (*GroupSizeEncoding) BlockLengthMinValue() uint16 {
@@ -76,7 +76,7 @@ func (*GroupSizeEncoding) BlockLengthNullValue() uint16 {
 }
 
 func (*GroupSizeEncoding) BlockLengthSinceVersion() uint16 {
-	return 0
+	return 3
 }
 
 func (g *GroupSizeEncoding) BlockLengthInActingVersion(actingVersion uint16) bool {
@@ -87,20 +87,20 @@ func (*GroupSizeEncoding) BlockLengthDeprecated() uint16 {
 	return 0
 }
 
-func (*GroupSizeEncoding) NumInGroupMinValue() uint16 {
+func (*GroupSizeEncoding) NumInGroupMinValue() uint8 {
 	return 0
 }
 
-func (*GroupSizeEncoding) NumInGroupMaxValue() uint16 {
-	return math.MaxUint16 - 1
+func (*GroupSizeEncoding) NumInGroupMaxValue() uint8 {
+	return math.MaxUint8 - 1
 }
 
-func (*GroupSizeEncoding) NumInGroupNullValue() uint16 {
-	return math.MaxUint16
+func (*GroupSizeEncoding) NumInGroupNullValue() uint8 {
+	return math.MaxUint8
 }
 
 func (*GroupSizeEncoding) NumInGroupSinceVersion() uint16 {
-	return 0
+	return 3
 }
 
 func (g *GroupSizeEncoding) NumInGroupInActingVersion(actingVersion uint16) bool {

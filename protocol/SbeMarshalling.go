@@ -17,7 +17,7 @@
 //
 // https://github.com/real-logic/simple-binary-encoding
 
-package uk_co_real_logic_sbe_benchmarks
+package protocol
 
 import (
 	"io"
