@@ -15,12 +15,13 @@
 /*
 ondisk is an example program for dragonboat's on disk state machine.
 */
-package main
+package event_stream
 
 import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"event-stream/broker"
 	"flag"
 	"fmt"
 	"os"
@@ -133,7 +134,7 @@ func main() {
 	if err != nil {
 		panic(err)
 	}
-	if err := nh.StartOnDiskReplica(initialMembers, *join, NewDiskKV, rc); err != nil {
+	if err := nh.StartOnDiskReplica(initialMembers, *join, broker.NewDiskKV, rc); err != nil {
 		fmt.Fprintf(os.Stderr, "failed to add cluster, %v\n", err)
 		os.Exit(1)
 	}
@@ -177,7 +178,7 @@ func main() {
 				}
 				ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 				if rt == PUT {
-					kv := &KVData{
+					kv := &broker.KVData{
 						Key: key,
 						Val: val,
 					}
