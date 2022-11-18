@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+option go_package = "protocol/";
+
+import "google/protobuf/timestamp.proto";
+
+message Job{
+  string name = 1;
+  string cron = 2;
+  int64  time_out = 8;
+  bool  concurrent = 7;
+  int64  version = 9;
+
+  string url = 3;
+  string head = 4;
+  string body = 5;
+  string method = 6;
+
+}
+
+message JobCreate{
+  string name = 1;
+  string cron = 2;
+  int64  time_out = 8;
+  bool  concurrent = 7;
+  int64  version = 9;
+  string url = 3;
+  string head = 4;
+  string body = 5;
+  string method = 6;
+
+}
+
+message JobActive{
+  string name = 1;
+  string cron = 2;
+  int64  time_out = 8;
+  bool  concurrent = 7;
+  int64  version = 9;
+  string url = 3;
+  string head = 4;
+  string body = 5;
+  string method = 6;
+
+}
+
+message JobCompleted{
+  string name = 1;
+  string cron = 2;
+  int64  time_out = 8;
+  bool  concurrent = 7;
+  int64  version = 9;
+  string url = 3;
+  string head = 4;
+  string body = 5;
+  string method = 6;
+
+}
+enum Intent {
+  CREATE = 0;
+  ACTIVE = 1;
+  COMPLETED = 2;
+  CANCELED = 3;
+}
+
+message Event {
+  int64 index = 1;
+  int64 source_index = 2;
+  oneof  value {
+    JobCompleted job_completed = 3;
+    JobCreate job_create = 4;
+    JobActive job_active = 5;
+  }
+
+  //  string email = 3;
+  //
+  //  Intent intent = 4;
+  //  google.protobuf.Timestamp last_updated = 5;
+}
+

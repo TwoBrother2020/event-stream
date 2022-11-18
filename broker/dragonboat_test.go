@@ -1,9 +1,12 @@
 package broker
 
 import (
+	"event-stream/protocol"
 	"fmt"
+	"github.com/golang/protobuf/proto"
 	"github.com/lni/dragonboat/v4"
 	"github.com/lni/dragonboat/v4/config"
+	"log"
 	"path/filepath"
 	"testing"
 	"time"
@@ -59,5 +62,15 @@ func creatNode(dir, host string, node uint64) (*dragonboat.NodeHost, error) {
 }
 
 func TestCar(t *testing.T) {
+	event := &protocol.Event{
+		Value: &protocol.Event_JobCompleted{},
+	}
+	event.GetValue()
+
+	marshal, err := proto.Marshal(event)
+	if err != nil {
+		log.Fatalln("Failed to encode address book:", err)
+	}
+	println(marshal)
 
 }
