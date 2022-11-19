@@ -2,24 +2,43 @@ package broker
 
 import (
 	"event-stream/protocol"
-	"fmt"
 	"github.com/golang/protobuf/proto"
 	"github.com/lni/dragonboat/v4"
 	"github.com/lni/dragonboat/v4/config"
+	"github.com/lni/dragonboat/v4/raftio"
+	sm "github.com/lni/dragonboat/v4/statemachine"
 	"log"
 	"path/filepath"
 	"testing"
 	"time"
 )
 
+type LeaderNotify struct {
+	Notify  chan raftio.LeaderInfo
+	Receive bool
+}
+
+func NewLeaderNotify() *LeaderNotify {
+	return &LeaderNotify{Notify: make(chan raftio.LeaderInfo), Receive: true}
+}
+
+func (l *LeaderNotify) LeaderUpdated(info raftio.LeaderInfo) {
+	if l.Receive {
+		l.Notify <- info
+	}
+
+	println("不通知")
+}
+
 func TestDragonboat(t *testing.T) {
 
 	dir := t.TempDir()
-	node1, err := creatNode(dir, "localhost:63001", 1)
+	leaderNotify := NewLeaderNotify()
+	host1, err := createHost(filepath.Join(dir, "1"), "localhost:63001", leaderNotify)
 	if err != nil {
 		t.Error(err)
 	}
-	defer node1.Close()
+	defer host1.Close()
 
 	rc := config.Config{
 		ReplicaID:          1,
@@ -30,38 +49,95 @@ func TestDragonboat(t *testing.T) {
 		SnapshotEntries:    10,
 		CompactionOverhead: 5,
 	}
-	err = node1.StartOnDiskReplica(map[uint64]dragonboat.Target{1: "localhost:63001"}, false, NewDiskKV, rc)
+	err = host1.StartOnDiskReplica(map[uint64]dragonboat.Target{1: "localhost:63001"}, false, func(shardID uint64, replicaID uint64) sm.IOnDiskStateMachine {
+
+		return &EventStateMachine{
+			shardID:   shardID,
+			replicaID: replicaID,
+			host:      host1,
+		}
+	}, rc)
 	if err != nil {
 		t.Error(err)
 	}
 
-	node2, err := creatNode(dir, "localhost:63002", 2)
+	for {
+		leaderInfo := <-leaderNotify.Notify
+		if leaderInfo.LeaderID != 0 {
+			leaderNotify.Receive = false
+			println("receive", leaderInfo.ShardID, leaderInfo.ReplicaID, leaderInfo.LeaderID)
+			break
+		}
+	}
+	host2, err := createHost(filepath.Join(dir, "2"), "localhost:63002", nil)
 	if err != nil {
 		t.Error(err)
 	}
-	defer node2.Close()
+	defer host2.Close()
+
 	rc.ReplicaID = 2
+	err = host2.StartOnDiskReplica(map[uint64]dragonboat.Target{},
+		true,
+		func(shardID uint64, replicaID uint64) sm.IOnDiskStateMachine {
+			return &EventStateMachine{
+				shardID:   shardID,
+				replicaID: replicaID,
+				host:      host1,
+			}
+		}, rc)
+	if err != nil {
+		t.Error(err)
+	}
+
+	id, _, b, err := host1.GetLeaderID(1)
+	if b {
+		println(id)
+	}
+	replica, err := host1.RequestAddReplica(1, 2, "localhost:63002", 0, 5*time.Second)
+	if err != nil {
+		return
+	}
+	result := <-replica.AppliedC()
+	println(result.Completed())
+
+	event := protocol.Event{
+		Value: &protocol.Event_JobCreate{JobCreate: &protocol.JobCreate{Name: ""}},
+	}
+	marshal, err := proto.Marshal(&event)
+	if err != nil {
+		return
+	}
+	opSession := host1.GetNoOPSession(1)
+	propose, err := host1.Propose(opSession, marshal, 5*time.Second)
+	if err != nil {
+		return
+	}
+	c := <-propose.AppliedC()
+	if c.Committed() {
+		println("")
+	}
 
 	time.Sleep(1 * time.Minute)
 }
 
-func creatNode(dir, host string, node uint64) (*dragonboat.NodeHost, error) {
-	datadir := filepath.Join(dir, fmt.Sprintf("node%d", node))
+func createHost(dir, host string, notify *LeaderNotify) (*dragonboat.NodeHost, error) {
 	nhc := config.NodeHostConfig{
-		WALDir:         datadir,
-		NodeHostDir:    datadir,
+		WALDir:         dir,
+		NodeHostDir:    dir,
 		RTTMillisecond: 200,
 		RaftAddress:    host,
+	}
+	if notify != nil {
+		nhc.RaftEventListener = notify
 	}
 	nh, err := dragonboat.NewNodeHost(nhc)
 	if err != nil {
 		return nil, err
 	}
-
 	return nh, nil
 }
 
-func TestCar(t *testing.T) {
+func TestEventStateMachine(t *testing.T) {
 	event := &protocol.Event{
 		Value: &protocol.Event_JobCompleted{},
 	}
