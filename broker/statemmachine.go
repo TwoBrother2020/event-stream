@@ -1,36 +1,47 @@
 package broker
 
 import (
+	"encoding/binary"
+	"event-stream/util"
 	sm "github.com/lni/dragonboat/v4/statemachine"
 	"github.com/tecbot/gorocksdb"
 	"io"
-	"sync/atomic"
-	"unsafe"
+	"os"
+	"path/filepath"
 )
 
 var processedIndex = []byte("processedIndex")
 
+const current = "current"
+const snapshot = "snapshot"
+const lasProcessIndex = "lasProcessIndex"
+
 type EventStateMachine struct {
 	// 快照目录
 	checkpointDir string
-	shardID       uint64
-	replicaID     uint64
-	db            unsafe.Pointer
+	// 数据存储目录
+	dir string
+	// 数据存储目录
+	shardID   uint64
+	replicaID uint64
+	db        *gorocksdb.TransactionDB
+}
+
+func NewEventStateMachine(dir string, shardID uint64, replicaID uint64) *EventStateMachine {
+	return &EventStateMachine{dir: dir, shardID: shardID, replicaID: replicaID}
 }
 
 func (s *EventStateMachine) Open(stopc <-chan struct{}) (uint64, error) {
-	//db, err := gorocksdb.OpenDb(gorocksdb.NewDefaultOptions(), "")
-	//if err != nil {
-	//	return 0, err
-	//}
-	//atomic.SwapPointer(&s.db, unsafe.Pointer(db))
-	//slice, err := db.Get(gorocksdb.NewDefaultReadOptions(), processedIndex)
-	//if slice.Size() == 0 {
-	//	return 0, nil
-	//}
-
-	//return binary.LittleEndian.Uint64(slice.Data()), nil
-	return 0, nil
+	db, err := createDb(s.dir)
+	if err != nil {
+		return 0, err
+	}
+	s.db = db
+	slice, err := db.Get(gorocksdb.NewDefaultReadOptions(), []byte(lasProcessIndex))
+	if err != nil || slice.Size() == 0 {
+		return 0, err
+	}
+	return binary.LittleEndian.Uint64(slice.Data()), nil
 
 }
 
@@ -80,19 +91,11 @@ func (s *EventStateMachine) Update(entries []sm.Entry) ([]sm.Entry, error) {
 }
 
 func (s *EventStateMachine) Lookup(key interface{}) (interface{}, error) {
-	//db := (*gorocksdb.TransactionDB)(atomic.LoadPointer(&s.db))
-	//if db != nil {
-	//	v, err := db.Get(gorocksdb.NewDefaultReadOptions(), key.([]byte))
-	//	if err == nil && s.closed {
-	//		panic("lookup returned valid result when EventStateMachine is already closed")
-	//	}
-	//	if err == pebble.ErrNotFound {
-	//		return v, nil
-	//	}
-	//	return v, err
-	//}
-	//return nil, errors.New("db closed")
-	return key, nil
+	slice, err := s.db.Get(gorocksdb.NewDefaultReadOptions(), key.([]byte))
+	if err != nil {
+		return nil, err
+	}
+	return slice.Data(), nil
 }
 
 func (s *EventStateMachine) Sync() error {
@@ -100,8 +103,7 @@ func (s *EventStateMachine) Sync() error {
 }
 
 func (s *EventStateMachine) PrepareSnapshot() (interface{}, error) {
-	db := (*gorocksdb.TransactionDB)(atomic.LoadPointer(&s.db))
-	checkpoint, err := db.NewCheckpoint()
+	checkpoint, err := s.db.NewCheckpoint()
 	if err != nil {
 		return nil, err
 	}
@@ -112,19 +114,54 @@ func (s *EventStateMachine) PrepareSnapshot() (interface{}, error) {
 
 }
 
-func (s *EventStateMachine) SaveSnapshot(checkpoint interface{}, writer io.Writer, notify <-chan struct{}) error {
-	//TODO implement me
-	panic("implement me")
-
+func (s *EventStateMachine) SaveSnapshot(point interface{}, writer io.Writer, notify <-chan struct{}) error {
+	checkpoint := point.(*gorocksdb.Checkpoint)
+	defer checkpoint.Destroy()
+	//不通过快照逐条去读取记录，直接拷贝快照文件
+	bytes, err := util.Zip(s.checkpointDir)
+	if err != nil {
+		return err
+	}
+	_, err = writer.Write(bytes.Bytes())
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 func (s *EventStateMachine) RecoverFromSnapshot(reader io.Reader, i <-chan struct{}) error {
-	//TODO implement me
-	panic("implement me")
+
+	s.db.Close()
+	if err := util.Unzip(filepath.Join(s.dir, current), reader); err != nil {
+		return err
+	}
+	db, err := createDb(s.dir)
+	if err != nil {
+		return err
+	}
+	s.db = db
+	return nil
+
 }
 
 func (s *EventStateMachine) Close() error {
-	db := (*gorocksdb.TransactionDB)(atomic.LoadPointer(&s.db))
-	db.Close()
+	s.db.Close()
 	return nil
+}
+func createDb(dir string) (*gorocksdb.TransactionDB, error) {
+	//启动时，如果快照存在，应该基于快照创建状态机
+	snapshotDir := filepath.Join(dir, snapshot)
+	currentDir := filepath.Join(dir, current)
+	_, err := os.Stat(snapshotDir)
+	if err == nil {
+		if err := os.RemoveAll(currentDir); err != nil {
+			return nil, err
+		}
+		if err := os.Rename(snapshotDir, currentDir); err != nil {
+			return nil, err
+		}
+	}
+	options := gorocksdb.NewDefaultOptions()
+	options.SetCreateIfMissing(true)
+	return gorocksdb.OpenTransactionDb(options, gorocksdb.NewDefaultTransactionDBOptions(), currentDir)
 }

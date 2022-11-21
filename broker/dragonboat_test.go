@@ -54,7 +54,6 @@ func TestDragonboat(t *testing.T) {
 		return &EventStateMachine{
 			shardID:   shardID,
 			replicaID: replicaID,
-			host:      host1,
 		}
 	}, rc)
 	if err != nil {
@@ -82,7 +81,6 @@ func TestDragonboat(t *testing.T) {
 			return &EventStateMachine{
 				shardID:   shardID,
 				replicaID: replicaID,
-				host:      host1,
 			}
 		}, rc)
 	if err != nil {
