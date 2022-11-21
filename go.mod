@@ -7,6 +7,7 @@ require (
 	github.com/golang/protobuf v1.5.2
 	github.com/lni/dragonboat/v4 v4.0.0-20221028074840-aadd6a9c2761
 	github.com/lni/goutils v1.3.1-0.20220604063047-388d67b4dbc4
+	github.com/robfig/cron/v3 v3.0.0
 	github.com/stretchr/testify v1.8.1
 	github.com/tecbot/gorocksdb v0.0.0-20191217155057-f0fad39f321c
 	google.golang.org/protobuf v1.27.1
@@ -50,7 +51,6 @@ require (
 	github.com/prometheus/client_model v0.2.1-0.20210607210712-147c58e9608a // indirect
 	github.com/prometheus/common v0.32.1 // indirect
 	github.com/prometheus/procfs v0.7.3 // indirect
-	github.com/robfig/cron/v3 v3.0.0 // indirect
 	github.com/rogpeppe/go-internal v1.8.1 // indirect
 	github.com/sean-/seed v0.0.0-20170313163322-e2103e2c3529 // indirect
 	github.com/valyala/fastrand v1.1.0 // indirect

@@ -1,13 +1,16 @@
 package broker
 
 import (
+	"encoding/binary"
 	"event-stream/protocol"
+	"event-stream/util"
 	sm "github.com/lni/dragonboat/v4/statemachine"
 	"github.com/robfig/cron/v3"
 	"github.com/tecbot/gorocksdb"
 	"google.golang.org/protobuf/proto"
 	"io"
-	"sync/atomic"
+	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -26,10 +29,6 @@ type EventStateMachine struct {
 	responses     chan sm.Result
 	// 数据存储目录
 	dir string
-	// 数据存储目录
-	shardID   uint64
-	replicaID uint64
-	db        *gorocksdb.TransactionDB
 }
 
 func NewEventStateMachine(dir string, shardID uint64, replicaID uint64) *EventStateMachine {
@@ -52,12 +51,6 @@ func (s *EventStateMachine) Open(stopc <-chan struct{}) (uint64, error) {
 
 func (s *EventStateMachine) Update(entries []sm.Entry) (res []sm.Entry, err error) {
 
-	println("update")
-	//if s.closed {
-	//	panic("update called after Close()")
-	//}
-	//db := (*gorocksdb.TransactionDB)(atomic.LoadPointer(&s.db))
-	//
 	begin := s.db.TransactionBegin(gorocksdb.NewDefaultWriteOptions(), gorocksdb.NewDefaultTransactionOptions(), nil)
 	for i := range entries {
 		entry := entries[i]
@@ -82,20 +75,30 @@ func (s *EventStateMachine) Update(entries []sm.Entry) (res []sm.Entry, err erro
 	return entries, nil
 }
 
-func processJobCreate(entry *sm.Entry, v *protocol.JobCreate) {
+func processJobCreate(entry *sm.Entry, v *protocol.JobCreate) error {
 	var db *gorocksdb.DB
 	schedule, err := cron.ParseStandard(v.Cron)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	next := schedule.Next(time.Now())
 	nanosecond := next.Nanosecond()
 	bytes, err := proto.Marshal(v)
 	if err != nil {
-		return
+		return err
 	}
-	err := db.Put(gorocksdb.NewDefaultWriteOptions(), nanosecond, bytes)
-
+	buf := make([]byte, 8)
+	binary.BigEndian.PutUint64(buf, uint64(nanosecond))
+	err = db.Put(gorocksdb.NewDefaultWriteOptions(), buf, bytes)
+	if err != nil {
+		return err
+	}
+	_ = createCompletedEvent(entry.Index, v.Name)
+	entry.Result = sm.Result{
+		Value: entry.Index,
+		Data:  []byte("创建完成"),
+	}
+	return nil
 }
 
 func (s *EventStateMachine) Lookup(key interface{}) (interface{}, error) {
@@ -156,6 +159,7 @@ func (s *EventStateMachine) Close() error {
 	s.db.Close()
 	return nil
 }
+
 func createDb(dir string) (*gorocksdb.TransactionDB, error) {
 	//启动时，如果快照存在，应该基于快照创建状态机
 	snapshotDir := filepath.Join(dir, snapshot)

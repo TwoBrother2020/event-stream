@@ -33,48 +33,27 @@ message JobCreate{
 
 message JobActive{
   string name = 1;
-  string cron = 2;
-  int64  time_out = 8;
-  bool  concurrent = 7;
-  int64  version = 9;
-  string url = 3;
-  string head = 4;
-  string body = 5;
-  string method = 6;
-
+  google.protobuf.Timestamp last_updated = 2;
 }
 
-message JobCompleted{
-  string name = 1;
-  string cron = 2;
-  int64  time_out = 8;
-  bool  concurrent = 7;
-  int64  version = 9;
-  string url = 3;
-  string head = 4;
-  string body = 5;
-  string method = 6;
-
-}
 enum Intent {
   CREATE = 0;
   ACTIVE = 1;
   COMPLETED = 2;
   CANCELED = 3;
 }
+enum EventType {
+  JOB_CREATE = 0;
+  JOB_FAIL = 1;
+  JOB_CANCEL = 2;
+  JOB_ACTIVE = 3;
+}
 
 message Event {
-  int64 index = 1;
+//  事件类型
+  EventType type=1;
+//  上一个事件位置
   int64 source_index = 2;
-  oneof  value {
-    JobCompleted job_completed = 3;
-    JobCreate job_create = 4;
-    JobActive job_active = 5;
-  }
-
-  //  string email = 3;
-  //
-  //  Intent intent = 4;
-  //  google.protobuf.Timestamp last_updated = 5;
+  bytes value = 3;
 }
 
