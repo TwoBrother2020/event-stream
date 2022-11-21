@@ -1,13 +1,14 @@
 package broker
 
 import (
-	"encoding/binary"
-	"event-stream/util"
+	"event-stream/protocol"
 	sm "github.com/lni/dragonboat/v4/statemachine"
+	"github.com/robfig/cron/v3"
 	"github.com/tecbot/gorocksdb"
+	"google.golang.org/protobuf/proto"
 	"io"
-	"os"
-	"path/filepath"
+	"sync/atomic"
+	"time"
 )
 
 var processedIndex = []byte("processedIndex")
@@ -19,6 +20,10 @@ const lasProcessIndex = "lasProcessIndex"
 type EventStateMachine struct {
 	// 快照目录
 	checkpointDir string
+	shardID       uint64
+	replicaID     uint64
+	db            *gorocksdb.TransactionDB
+	responses     chan sm.Result
 	// 数据存储目录
 	dir string
 	// 数据存储目录
@@ -45,7 +50,7 @@ func (s *EventStateMachine) Open(stopc <-chan struct{}) (uint64, error) {
 
 }
 
-func (s *EventStateMachine) Update(entries []sm.Entry) ([]sm.Entry, error) {
+func (s *EventStateMachine) Update(entries []sm.Entry) (res []sm.Entry, err error) {
 
 	println("update")
 	//if s.closed {
@@ -53,41 +58,44 @@ func (s *EventStateMachine) Update(entries []sm.Entry) ([]sm.Entry, error) {
 	//}
 	//db := (*gorocksdb.TransactionDB)(atomic.LoadPointer(&s.db))
 	//
-	//begin := db.TransactionBegin(gorocksdb.NewDefaultWriteOptions(), gorocksdb.NewDefaultTransactionOptions(), nil)
-	//for i := range entries {
-	//	entry := entries[i]
-	//	var event protocol.Event
-	//	err := proto.Unmarshal(entry.Cmd, &event)
-	//	if err != nil {
-	//		panic("unmarshal fail")
-	//	}
-	//	if jobCreate, ok := event.Value.(*protocol.Event_JobCreate); ok {
-	//
-	//		job := jobCreate.JobCreate
-	//
-	//		println("create", job.Name)
-	//
-	//		continue
-	//	}
-	//
-	//	if _, ok := event.Value.(*protocol.Event_JobActive); ok {
-	//
-	//		continue
-	//	}
-	//	if _, ok := event.Value.(*protocol.Event_JobCompleted); ok {
-	//
-	//		continue
-	//	}
-	//
-	//}
+	begin := s.db.TransactionBegin(gorocksdb.NewDefaultWriteOptions(), gorocksdb.NewDefaultTransactionOptions(), nil)
+	for i := range entries {
+		entry := entries[i]
+		var event protocol.Event
+		err = proto.Unmarshal(entry.Cmd, &event)
+		if err != nil {
+			panic("unmarshal fail")
+		}
 
-	//result := <-requestState.AppliedC()
-	//if result.Committed() {
-	//
-	//}
-	//begin.Commit()
+		switch v := event.Value.(type) {
+		case *protocol.Event_JobCreate:
+			processJobCreate(&entry, v.JobCreate)
+		case *protocol.Event_JobActive:
+		case *protocol.Event_JobCompleted:
+		default:
+			panic("implement me")
+		}
+		s.responses <- entry.Result
+	}
+	begin.Commit()
 
 	return entries, nil
+}
+
+func processJobCreate(entry *sm.Entry, v *protocol.JobCreate) {
+	var db *gorocksdb.DB
+	schedule, err := cron.ParseStandard(v.Cron)
+	if err != nil {
+		panic(err)
+	}
+	next := schedule.Next(time.Now())
+	nanosecond := next.Nanosecond()
+	bytes, err := proto.Marshal(v)
+	if err != nil {
+		return
+	}
+	err := db.Put(gorocksdb.NewDefaultWriteOptions(), nanosecond, bytes)
+
 }
 
 func (s *EventStateMachine) Lookup(key interface{}) (interface{}, error) {
