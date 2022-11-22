@@ -2,7 +2,6 @@ syntax = "proto3";
 
 option go_package = "protocol/";
 
-import "google/protobuf/timestamp.proto";
 
 message Job{
   string name = 1;
@@ -33,7 +32,6 @@ message JobCreate{
 
 message JobActive{
   string name = 1;
-  google.protobuf.Timestamp last_updated = 2;
 }
 
 enum Intent {

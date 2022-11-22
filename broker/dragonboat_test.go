@@ -1,4 +1,4 @@
-package broker
+package key
 
 import (
 	"event-stream/protocol"
@@ -98,9 +98,7 @@ func TestDragonboat(t *testing.T) {
 	result := <-replica.AppliedC()
 	println(result.Completed())
 
-	event := protocol.Event{
-		Value: &protocol.Event_JobCreate{JobCreate: &protocol.JobCreate{Name: ""}},
-	}
+	event := protocol.Event{}
 	marshal, err := proto.Marshal(&event)
 	if err != nil {
 		return
@@ -136,9 +134,7 @@ func createHost(dir, host string, notify *LeaderNotify) (*dragonboat.NodeHost, e
 }
 
 func TestEventStateMachine(t *testing.T) {
-	event := &protocol.Event{
-		Value: &protocol.Event_JobCompleted{},
-	}
+	event := &protocol.Event{}
 	event.GetValue()
 
 	marshal, err := proto.Marshal(event)

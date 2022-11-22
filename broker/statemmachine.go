@@ -1,7 +1,8 @@
-package broker
+package key
 
 import (
 	"encoding/binary"
+	"errors"
 	"event-stream/protocol"
 	"event-stream/util"
 	sm "github.com/lni/dragonboat/v4/statemachine"
@@ -51,53 +52,50 @@ func (s *EventStateMachine) Open(stopc <-chan struct{}) (uint64, error) {
 
 func (s *EventStateMachine) Update(entries []sm.Entry) (res []sm.Entry, err error) {
 
-	begin := s.db.TransactionBegin(gorocksdb.NewDefaultWriteOptions(), gorocksdb.NewDefaultTransactionOptions(), nil)
 	for i := range entries {
 		entry := entries[i]
-		var event protocol.Event
-		err = proto.Unmarshal(entry.Cmd, &event)
-		if err != nil {
-			panic("unmarshal fail")
-		}
-
-		switch v := event.Value.(type) {
-		case *protocol.Event_JobCreate:
-			processJobCreate(&entry, v.JobCreate)
-		case *protocol.Event_JobActive:
-		case *protocol.Event_JobCompleted:
-		default:
-			panic("implement me")
-		}
+		process(s.db, &entry)
 		s.responses <- entry.Result
 	}
-	begin.Commit()
 
 	return entries, nil
 }
 
-func processJobCreate(entry *sm.Entry, v *protocol.JobCreate) error {
-	var db *gorocksdb.DB
-	schedule, err := cron.ParseStandard(v.Cron)
-	if err != nil {
+func process(db *gorocksdb.TransactionDB, entry *sm.Entry) error {
+	var event protocol.Event
+	if err := proto.Unmarshal(entry.Cmd, &event); err != nil {
 		return err
 	}
-	next := schedule.Next(time.Now())
-	nanosecond := next.Nanosecond()
-	bytes, err := proto.Marshal(v)
-	if err != nil {
-		return err
+
+	switch event.Type {
+	case protocol.EventType_JOB_CREATE:
+		var job protocol.JobCreate
+		if err := proto.Unmarshal(event.Value, &job); err != nil {
+			return err
+		}
+		schedule, err := cron.ParseStandard(job.Cron)
+		if err != nil {
+			return err
+		}
+		slice, err := db.Get(gorocksdb.NewDefaultReadOptions(), []byte(job.Name))
+		if err != nil {
+			return err
+		}
+		if len(slice.Data()) > 0 {
+			return errors.New("job存在")
+		}
+		next := schedule.Next(time.Now())
+		err = db.Put(gorocksdb.NewDefaultWriteOptions(), []byte(job.Name), event.Value)
+		if err != nil {
+			return err
+		}
+		nanosecond := next.Nanosecond()
+		err = db.Put(gorocksdb.NewDefaultWriteOptions(), Int64Byte(uint64(nanosecond)), event.Value)
+		if err != nil {
+			return err
+		}
 	}
-	buf := make([]byte, 8)
-	binary.BigEndian.PutUint64(buf, uint64(nanosecond))
-	err = db.Put(gorocksdb.NewDefaultWriteOptions(), buf, bytes)
-	if err != nil {
-		return err
-	}
-	_ = createCompletedEvent(entry.Index, v.Name)
-	entry.Result = sm.Result{
-		Value: entry.Index,
-		Data:  []byte("创建完成"),
-	}
+	gorocksdb.wr
 	return nil
 }
 
