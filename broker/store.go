@@ -1,8 +1,10 @@
 package key
 
 import (
+	"errors"
 	"event-stream/protocol"
 	"github.com/tecbot/gorocksdb"
+	"google.golang.org/protobuf/proto"
 )
 
 type store struct {
@@ -22,11 +24,62 @@ func newStore(dir string) (*store, error) {
 	return &store{dir: dir, db: db, jobHandle: handles[1], timeHandle: handles[2]}, nil
 }
 
-func (s *store) Update(job protocol.JobCreate) {
+func (s *store) Create(job protocol.JobCreate) error {
 
 	slice, err := s.db.GetCF(gorocksdb.NewDefaultReadOptions(), s.jobHandle, []byte(job.Name))
 	if err != nil {
-		return
+		return err
+	}
+	if len(slice.Data()) > 0 {
+		return errors.New("job name exist")
 	}
 
+	value, err := proto.Marshal(&job)
+	if err != nil {
+		return err
+	}
+	err = s.db.PutCF(gorocksdb.NewDefaultWriteOptions(), s.jobHandle, []byte(job.Name), value)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
+
+//func (s *store) Update(job protocol.JobCreate) error {
+//
+//	slice, err := s.db.GetCF(gorocksdb.NewDefaultReadOptions(), s.jobHandle, []byte(job.Name))
+//	if err != nil {
+//		return err
+//	}
+//	if len(slice.Data()) == 0 {
+//		s.db.PutCF(gorocksdb.NewDefaultWriteOptions(), s.jobHandle, []byte(job.Name))
+//	}
+//
+//	return nil
+//}
+//
+//func (s *store) Cancel(job protocol.JobCreate) error {
+//
+//	slice, err := s.db.GetCF(gorocksdb.NewDefaultReadOptions(), s.jobHandle, []byte(job.Name))
+//	if err != nil {
+//		return err
+//	}
+//	if len(slice.Data()) == 0 {
+//		s.db.PutCF(gorocksdb.NewDefaultWriteOptions(), s.jobHandle, []byte(job.Name))
+//	}
+//
+//	return nil
+//}
+//
+//func (s *store) Delete(job protocol.JobCreate) error {
+//
+//	slice, err := s.db.GetCF(gorocksdb.NewDefaultReadOptions(), s.jobHandle, []byte(job.Name))
+//	if err != nil {
+//		return err
+//	}
+//	if len(slice.Data()) == 0 {
+//		s.db.PutCF(gorocksdb.NewDefaultWriteOptions(), s.jobHandle, []byte(job.Name))
+//	}
+//	return nil
+//}

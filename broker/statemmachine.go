@@ -95,7 +95,6 @@ func process(db *gorocksdb.TransactionDB, entry *sm.Entry) error {
 			return err
 		}
 	}
-	gorocksdb.wr
 	return nil
 }
 
