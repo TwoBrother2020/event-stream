@@ -8,9 +8,7 @@ require (
 	github.com/golang/protobuf v1.5.2
 	github.com/lni/dragonboat/v4 v4.0.0-20221028074840-aadd6a9c2761
 	github.com/lni/goutils v1.3.1-0.20220604063047-388d67b4dbc4
-	github.com/robfig/cron/v3 v3.0.0
 	github.com/stretchr/testify v1.8.1
-	github.com/tecbot/gorocksdb v0.0.0-20191217155057-f0fad39f321c
 	google.golang.org/protobuf v1.27.1
 )
 
@@ -27,9 +25,6 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dgraph-io/ristretto v0.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.0 // indirect
-	github.com/facebookgo/ensure v0.0.0-20200202191622-63f1cf65ac4c // indirect
-	github.com/facebookgo/stack v0.0.0-20160209184415-751773369052 // indirect
-	github.com/facebookgo/subset v0.0.0-20200203212716-c811ad88dec4 // indirect
 	github.com/getsentry/sentry-go v0.12.0 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b // indirect

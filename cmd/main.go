@@ -1,18 +1,30 @@
 package main
 
 import (
-	badger "github.com/dgraph-io/badger/v3"
+	"fmt"
 	"log"
+
+	"github.com/cockroachdb/pebble"
 )
 
 func main() {
-	// Open the Badger database located in the /tmp/badger directory.
-	// It will be created if it doesn't exist.
-	db, err := badger.Open(badger.DefaultOptions("/tmp/badger"))
+	db, err := pebble.Open("demo", &pebble.Options{})
 	if err != nil {
 		log.Fatal(err)
 	}
-	defer db.Close()
-	// Your code here…
-	println("hello world")
+	key := []byte("hello")
+	if err := db.Set(key, []byte("world"), pebble.Sync); err != nil {
+		log.Fatal(err)
+	}
+	value, closer, err := db.Get(key)
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Printf("%s %s\n", key, value)
+	if err := closer.Close(); err != nil {
+		log.Fatal(err)
+	}
+	if err := db.Close(); err != nil {
+		log.Fatal(err)
+	}
 }

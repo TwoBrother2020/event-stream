@@ -5,7 +5,6 @@ import (
 	"github.com/cockroachdb/pebble"
 	"github.com/dgraph-io/badger/v3"
 	"github.com/stretchr/testify/assert"
-	"github.com/tecbot/gorocksdb"
 	"testing"
 )
 
@@ -26,20 +25,6 @@ func BenchmarkBadger(b *testing.B) {
 }
 
 //BenchmarkRocksDB-8        349010              3369 ns/op
-
-func BenchmarkRocksDB(b *testing.B) {
-
-	options := gorocksdb.NewDefaultOptions()
-	options.SetCreateIfMissing(true)
-	db, err := gorocksdb.OpenDb(options, b.TempDir())
-	assert.Nil(b, err)
-	defer db.Close()
-	for i := 0; i < b.N; i++ {
-		bytes := []byte(fmt.Sprintf("hello %d", i))
-		err := db.Put(gorocksdb.NewDefaultWriteOptions(), bytes, bytes)
-		assert.Nil(b, err)
-	}
-}
 
 // BenchmarkPebble-8         870882              1202 ns/op
 func BenchmarkPebble(b *testing.B) {
@@ -62,19 +47,4 @@ func TestEventStateMachine_Open(t *testing.T) {
 	assert.Nil(t, err)
 	assert.Equal(t, uint64(0), open)
 
-}
-
-func TestRocksDBTransaction(t *testing.T) {
-	dir := t.TempDir()
-	options := gorocksdb.NewDefaultOptions()
-	options.SetCreateIfMissing(true)
-	db, err := gorocksdb.OpenDb(options, dir)
-	readOptions := gorocksdb.NewDefaultReadOptions()
-	readOptions.SetPrefixSameAsStart(true)
-	assert.Nil(t, err)
-	transactionDb, err := gorocksdb.OpenTransactionDb(gorocksdb.NewDefaultOptions(), gorocksdb.NewDefaultTransactionDBOptions(), dir)
-	assert.Nil(t, err)
-
-	defer db.Close()
-	defer transactionDb.Close()
 }
