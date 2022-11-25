@@ -18,9 +18,15 @@ type EventStateMachine struct {
 	checkpointDir string
 	shardID       uint64
 	replicaID     uint64
-	responses     chan sm.Result
+	responses     chan *Response
 	// 数据存储目录
-	dir string
+	dir    string
+	leader bool
+}
+
+func (s *EventStateMachine) Lookup(i interface{}) (interface{}, error) {
+	//TODO implement me
+	panic("implement me")
 }
 
 func NewEventStateMachine(dir string, shardID uint64, replicaID uint64) *EventStateMachine {
@@ -36,7 +42,8 @@ func (s *EventStateMachine) Update(entries []sm.Entry) (res []sm.Entry, err erro
 
 	for i := range entries {
 		entry := entries[i]
-		s.responses <- entry.Result
+		println(string(entry.Cmd))
+		s.responses <- &Response{ShardID: s.shardID, data: &sm.Result{Value: entry.Index, Data: entry.Cmd}}
 	}
 
 	return entries, nil
