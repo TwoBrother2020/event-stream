@@ -22,10 +22,13 @@ func TestBroker_LeaderUpdated(t *testing.T) {
 
 	time.Sleep(15 * time.Second)
 
-	_, err = broker2.Propose(1, []byte("hello world"))
+	req, err := broker2.Propose(1, []byte("hello world"))
 	if err != nil {
 		t.Fatal(err)
 	}
+	request := <-req.AppliedC()
+	logs, _ := request.RaftLogs()
+	println(len(logs))
 	time.Sleep(15 * time.Minute)
 
 }

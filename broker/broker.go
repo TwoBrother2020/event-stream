@@ -36,7 +36,6 @@ func (b *Broker) LeaderUpdated(info raftio.LeaderInfo) {
 		if stateMachine.replicaID == info.LeaderID {
 			log.Printf("%s ShardID %d ReplicaID %d  became leader", b.host, info.ShardID, info.ReplicaID)
 			stateMachine.leader = true
-
 		} else {
 			stateMachine.leader = false
 		}
@@ -48,6 +47,7 @@ func (b *Broker) createStateMachine(shardID uint64, replicaID uint64) sm.IOnDisk
 		shardID:   shardID,
 		replicaID: replicaID,
 		responses: b.response,
+		nh:        b.node,
 	}
 	if replicaMap, ok := b.stateMachine[shardID]; ok {
 		replicaMap[replicaID] = state
@@ -92,13 +92,14 @@ func (b *Broker) writeResponse() {
 	for {
 		select {
 		case res := <-b.response:
-			log.Printf("%s write shardId %d index %d %s \n", b.host, res.ShardID, res.data.Value, string(res.data.Data))
 			noOPSession := b.node.GetNoOPSession(res.ShardID)
 			_, err := b.node.Propose(noOPSession, res.data.Data, 30*time.Second)
 			if err != nil {
 				log.Printf("writeResponse error %s", err.Error())
 				continue
 			}
+			log.Printf("%s write shardId %d index %d %s \n", b.host, res.ShardID, res.data.Value, string(res.data.Data))
+
 		case <-b.signal:
 			return
 		}
@@ -108,6 +109,7 @@ func (b *Broker) writeResponse() {
 func (b *Broker) Propose(shardId uint64, cmd []byte) (*dragonboat.RequestState, error) {
 
 	noOPSession := b.node.GetNoOPSession(shardId)
+	b.node.GetLeaderID(shardId)
 	return b.node.Propose(noOPSession, cmd, 30*time.Second)
 
 }

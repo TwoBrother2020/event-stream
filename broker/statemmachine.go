@@ -4,6 +4,7 @@ import (
 	"event-stream/util"
 	"fmt"
 	"github.com/cockroachdb/pebble"
+	"github.com/lni/dragonboat/v4"
 	sm "github.com/lni/dragonboat/v4/statemachine"
 	"io"
 	"math/rand"
@@ -30,14 +31,10 @@ type EventStateMachine struct {
 	replicaID     uint64
 	db            *pebble.DB
 	responses     chan *Response
+	nh            *dragonboat.NodeHost
 	// 数据存储目录
 	dir    string
 	leader bool
-}
-
-func (s *EventStateMachine) Lookup(i interface{}) (interface{}, error) {
-	//TODO implement me
-	panic("implement me")
 }
 
 func NewEventStateMachine(dir string, shardID uint64, replicaID uint64) *EventStateMachine {
@@ -46,14 +43,17 @@ func NewEventStateMachine(dir string, shardID uint64, replicaID uint64) *EventSt
 
 func (s *EventStateMachine) Open(stopc <-chan struct{}) (uint64, error) {
 	return 0, nil
+}
 
+func (s *EventStateMachine) Lookup(i interface{}) (interface{}, error) {
+	//TODO implement me
+	panic("implement me")
 }
 
 func (s *EventStateMachine) Update(entries []sm.Entry) (res []sm.Entry, err error) {
 
 	for i := range entries {
 		entry := entries[i]
-		println(string(entry.Cmd))
 		s.responses <- &Response{ShardID: s.shardID, data: &sm.Result{Value: entry.Index, Data: entry.Cmd}}
 	}
 
@@ -99,6 +99,7 @@ func (s *EventStateMachine) getDBDirName() string {
 	part := fmt.Sprintf("%d_%d", s.shardID, s.replicaID)
 	return filepath.Join(s.dir, part)
 }
+
 func (s *EventStateMachine) getRandomDBDirName(dir string) string {
 	part := "%d_%d"
 	rn := rand.Uint64()
