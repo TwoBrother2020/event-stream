@@ -38,10 +38,8 @@ import (
 )
 
 const (
-	appliedIndexKey    string = "disk_kv_applied_index"
-	testDBDirName      string = "example-data"
-	currentDBFilename  string = "current"
-	updatingDBFilename string = "current.updating"
+	appliedIndexKey string = "disk_kv_applied_index"
+	testDBDirName   string = "example-data"
 )
 
 //

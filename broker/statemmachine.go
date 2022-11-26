@@ -2,9 +2,13 @@ package key
 
 import (
 	"event-stream/util"
+	"fmt"
+	"github.com/cockroachdb/pebble"
 	sm "github.com/lni/dragonboat/v4/statemachine"
 	"io"
+	"math/rand"
 	"path/filepath"
+	"time"
 )
 
 var processedIndex = []byte("processedIndex")
@@ -12,12 +16,19 @@ var processedIndex = []byte("processedIndex")
 const current = "current"
 const snapshot = "snapshot"
 const lasProcessIndex = "lasProcessIndex"
+const (
+	currentDBFilename            string = "current"
+	updatingDBFilename           string = "current.updating"
+	updatingDBCheckpointFilename string = "checkpoint.updating"
+	currentDBCheckpointFilename  string = "checkpoint"
+)
 
 type EventStateMachine struct {
 	// 快照目录
 	checkpointDir string
 	shardID       uint64
 	replicaID     uint64
+	db            *pebble.DB
 	responses     chan *Response
 	// 数据存储目录
 	dir    string
@@ -54,7 +65,6 @@ func (s *EventStateMachine) Sync() error {
 }
 
 func (s *EventStateMachine) PrepareSnapshot() (interface{}, error) {
-
 	return nil, nil
 
 }
@@ -83,4 +93,15 @@ func (s *EventStateMachine) RecoverFromSnapshot(reader io.Reader, i <-chan struc
 
 func (s *EventStateMachine) Close() error {
 	return nil
+}
+
+func (s *EventStateMachine) getDBDirName() string {
+	part := fmt.Sprintf("%d_%d", s.shardID, s.replicaID)
+	return filepath.Join(s.dir, part)
+}
+func (s *EventStateMachine) getRandomDBDirName(dir string) string {
+	part := "%d_%d"
+	rn := rand.Uint64()
+	ct := time.Now().UnixNano()
+	return filepath.Join(dir, fmt.Sprintf(part, rn, ct))
 }
