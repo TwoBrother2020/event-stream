@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package key
+package mm
 
 import (
 	"bytes"
@@ -21,6 +21,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/lni/dragonboat/v4"
 	"io"
 	"io/ioutil"
 	"math/rand"
@@ -38,8 +39,10 @@ import (
 )
 
 const (
-	appliedIndexKey string = "disk_kv_applied_index"
-	testDBDirName   string = "example-data"
+	appliedIndexKey    string = "disk_kv_applied_index"
+	testDBDirName      string = "example-data"
+	currentDBFilename  string = "current"
+	updatingDBFilename string = "current.updating"
 )
 
 //
@@ -272,21 +275,13 @@ func cleanupNodeDataDir(dir string) error {
 // it is used as an example, it is implemented using the most basic features
 // common in most key-value stores. This is NOT a benchmark program.
 type DiskKV struct {
-	clusterID   uint64
-	nodeID      uint64
 	lastApplied uint64
 	db          unsafe.Pointer
 	closed      bool
 	aborted     bool
-}
-
-// NewDiskKV creates a new disk kv test state machine.
-func NewDiskKV(clusterID uint64, nodeID uint64) sm.IOnDiskStateMachine {
-	d := &DiskKV{
-		clusterID: clusterID,
-		nodeID:    nodeID,
-	}
-	return d
+	shardID     uint64
+	replicaID   uint64
+	nh          *dragonboat.NodeHost
 }
 
 func (d *DiskKV) queryAppliedIndex(db *pebbledb) (uint64, error) {
@@ -308,7 +303,7 @@ func (d *DiskKV) queryAppliedIndex(db *pebbledb) (uint64, error) {
 // Open opens the state machine and return the index of the last Raft Log entry
 // already updated into the state machine.
 func (d *DiskKV) Open(stopc <-chan struct{}) (uint64, error) {
-	dir := getNodeDBDirName(d.clusterID, d.nodeID)
+	dir := getNodeDBDirName(d.shardID, d.replicaID)
 	if err := createNodeDataDir(dir); err != nil {
 		panic(err)
 	}
@@ -501,7 +496,7 @@ func (d *DiskKV) RecoverFromSnapshot(r io.Reader,
 	if d.closed {
 		panic("recover from snapshot called after Close()")
 	}
-	dir := getNodeDBDirName(d.clusterID, d.nodeID)
+	dir := getNodeDBDirName(d.shardID, d.replicaID)
 	dbdir := getNewRandomDBDirName(dir)
 	oldDirName, err := getCurrentDBDirName(dir)
 	if err != nil {

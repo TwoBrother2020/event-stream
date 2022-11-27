@@ -1,4 +1,4 @@
-package key
+package mm
 
 import (
 	"github.com/lni/dragonboat/v4"
@@ -10,24 +10,18 @@ import (
 	"time"
 )
 
-type Response struct {
-	ShardID uint64
-	data    *sm.Result
-}
-
 type Broker struct {
 	dir          string
 	host         string
 	node         *dragonboat.NodeHost
 	targets      map[uint64]dragonboat.Target
 	replicaID    uint64
-	stateMachine map[uint64]map[uint64]*EventStateMachine
-	response     chan *Response
+	stateMachine map[uint64]map[uint64]*DiskKV
 	signal       chan os.Signal
 }
 
 func NewBroker(dir string, host string, targets map[uint64]dragonboat.Target, replicaID uint64) *Broker {
-	return &Broker{dir: dir, host: host, targets: targets, replicaID: replicaID, response: make(chan *Response, 100), stateMachine: map[uint64]map[uint64]*EventStateMachine{}}
+	return &Broker{dir: dir, host: host, targets: targets, replicaID: replicaID, stateMachine: map[uint64]map[uint64]*DiskKV{}}
 }
 
 func (b *Broker) LeaderUpdated(info raftio.LeaderInfo) {
@@ -35,24 +29,21 @@ func (b *Broker) LeaderUpdated(info raftio.LeaderInfo) {
 		stateMachine := replicaMap[info.ReplicaID]
 		if stateMachine.replicaID == info.LeaderID {
 			log.Printf("%s ShardID %d ReplicaID %d  became leader", b.host, info.ShardID, info.ReplicaID)
-			stateMachine.leader = true
 		} else {
-			stateMachine.leader = false
 		}
 	}
 }
 
 func (b *Broker) createStateMachine(shardID uint64, replicaID uint64) sm.IOnDiskStateMachine {
-	state := &EventStateMachine{
+	state := &DiskKV{
 		shardID:   shardID,
 		replicaID: replicaID,
-		responses: b.response,
 		nh:        b.node,
 	}
 	if replicaMap, ok := b.stateMachine[shardID]; ok {
 		replicaMap[replicaID] = state
 	} else {
-		b.stateMachine[shardID] = map[uint64]*EventStateMachine{replicaID: state}
+		b.stateMachine[shardID] = map[uint64]*DiskKV{replicaID: state}
 	}
 	return state
 }
@@ -84,26 +75,7 @@ func (b *Broker) run() error {
 	if nh.StartOnDiskReplica(b.targets, false, b.createStateMachine, rc); err != nil {
 		return err
 	}
-	go b.writeResponse()
 	return nil
-}
-
-func (b *Broker) writeResponse() {
-	for {
-		select {
-		case res := <-b.response:
-			noOPSession := b.node.GetNoOPSession(res.ShardID)
-			_, err := b.node.Propose(noOPSession, res.data.Data, 30*time.Second)
-			if err != nil {
-				log.Printf("writeResponse error %s", err.Error())
-				continue
-			}
-			log.Printf("%s write shardId %d index %d %s \n", b.host, res.ShardID, res.data.Value, string(res.data.Data))
-
-		case <-b.signal:
-			return
-		}
-	}
 }
 
 func (b *Broker) Propose(shardId uint64, cmd []byte) (*dragonboat.RequestState, error) {
